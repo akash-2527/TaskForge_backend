@@ -1,7 +1,7 @@
 FROM node:20-alpine
 
 # Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+RUN apk add --no-cache dumb-init openssl
 
 WORKDIR /app
 
