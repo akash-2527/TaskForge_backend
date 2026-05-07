@@ -1,0 +1,169 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// ENUMS
+// ============================================================
+
+enum ProjectRole {
+  ADMIN
+  MEMBER
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  DONE
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum ActivityAction {
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_DELETED
+  STATUS_CHANGED
+  ASSIGNMENT_CHANGED
+  MEMBER_ADDED
+  MEMBER_REMOVED
+  PROJECT_UPDATED
+  PROJECT_CREATED
+}
+
+// ============================================================
+// USERS TABLE
+// ============================================================
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  email         String    @unique
+  password_hash String
+  full_name     String
+  avatar_url    String?
+  is_active     Boolean   @default(true)
+  last_login_at DateTime?
+  created_at    DateTime  @default(now())
+  updated_at    DateTime  @updatedAt
+
+  projectMemberships ProjectMember[]
+  createdTasks       Task[]          @relation("TaskCreator")
+  assignedTasks      Task[]          @relation("TaskAssignee")
+  activityLogs       ActivityLog[]   @relation("ActivityActor")
+  createdProjects    Project[]       @relation("ProjectCreator")
+
+  @@index([email])
+  @@map("users")
+}
+
+// ============================================================
+// PROJECTS TABLE
+// ============================================================
+
+model Project {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String
+  description String?
+  is_archived Boolean  @default(false)
+  created_by  String   @db.Uuid
+  created_at  DateTime @default(now())
+  updated_at  DateTime @updatedAt
+
+  creator      User            @relation("ProjectCreator", fields: [created_by], references: [id])
+  members      ProjectMember[]
+  tasks        Task[]
+  activityLogs ActivityLog[]
+
+  @@index([created_by])
+  @@index([is_archived])
+  @@map("projects")
+}
+
+// ============================================================
+// PROJECT MEMBERS - Junction Table (Project-Scoped RBAC)
+// ============================================================
+
+model ProjectMember {
+  id         String      @id @default(uuid()) @db.Uuid
+  project_id String      @db.Uuid
+  user_id    String      @db.Uuid
+  role       ProjectRole @default(MEMBER)
+  joined_at  DateTime    @default(now())
+  updated_at DateTime    @updatedAt
+
+  project Project @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@unique([project_id, user_id])
+  @@index([project_id])
+  @@index([user_id])
+  @@index([project_id, user_id])
+  @@index([project_id, role])
+  @@map("project_members")
+}
+
+// ============================================================
+// TASKS TABLE
+// ============================================================
+
+model Task {
+  id          String       @id @default(uuid()) @db.Uuid
+  project_id  String       @db.Uuid
+  title       String
+  description String?
+  status      TaskStatus   @default(TODO)
+  priority    TaskPriority @default(MEDIUM)
+  due_date    DateTime?
+  created_by  String       @db.Uuid
+  assigned_to String?      @db.Uuid
+  is_deleted  Boolean      @default(false)
+  created_at  DateTime     @default(now())
+  updated_at  DateTime     @updatedAt
+
+  project      Project       @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  creator      User          @relation("TaskCreator", fields: [created_by], references: [id])
+  assignee     User?         @relation("TaskAssignee", fields: [assigned_to], references: [id])
+  activityLogs ActivityLog[]
+
+  @@index([project_id])
+  @@index([assigned_to])
+  @@index([project_id, status])
+  @@index([project_id, assigned_to])
+  @@index([due_date])
+  @@index([project_id, is_deleted])
+  @@index([created_by])
+  @@map("tasks")
+}
+
+// ============================================================
+// ACTIVITY LOGS - Audit Trail
+// ============================================================
+
+model ActivityLog {
+  id         String         @id @default(uuid()) @db.Uuid
+  project_id String         @db.Uuid
+  task_id    String?        @db.Uuid
+  actor_id   String         @db.Uuid
+  action     ActivityAction
+  metadata   Json?
+  created_at DateTime       @default(now())
+
+  project Project  @relation(fields: [project_id], references: [id], onDelete: Cascade)
+  task    Task?    @relation(fields: [task_id], references: [id], onDelete: SetNull)
+  actor   User     @relation("ActivityActor", fields: [actor_id], references: [id])
+
+  @@index([project_id])
+  @@index([task_id])
+  @@index([actor_id])
+  @@index([project_id, created_at])
+  @@map("activity_logs")
+}
