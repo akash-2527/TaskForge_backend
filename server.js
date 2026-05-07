@@ -3,6 +3,7 @@ import { createApp } from './src/app.js';
 import { prisma } from './src/config/database.js';
 
 const app = createApp();
+app.set('trust proxy', 1);
 const PORT = process.env.PORT || 3000;
 
 async function startServer() {
